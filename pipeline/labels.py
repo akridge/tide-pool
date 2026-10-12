@@ -1,13 +1,22 @@
 """Label taxonomy for the NOAA PIFSC Pacific benthic cover Tier-3 (T3) classes.
 
-T3 -> T1 mapping was derived from the bucket itself: every crop in
-`pacific_t3_splits/<split>/<T3>/` appears under exactly one `pacific_t1/<T1>/`
-folder with the same file name.
+Official names and the T1 -> T2 -> T2b -> T3 hierarchy come from the PIFSC taxonomy
+tree in `taxonomy_tree.json` next to this file:
 
-Long names are a best-effort expansion of the PIFSC CoralNet short codes and
-are used for zero-shot prompts and display. Entries marked `sure=False` are
-guesses; correct them here (or pass --labels-csv to build.py) if you know better.
+    T1   broad group           CORAL, MA, TURF, CCA, SED, I, SC, MF, ...
+    T2   growth form / type    ENC (encrusting hard coral), BR, TAB, MASS, UPMA, EMA, ...
+    T2b  genus / subgroup      POSP (Porites sp), MOSP (Montipora sp), BRMA, ...
+    T3   class                 the 67 codes the dataset is split by
+
+`PROMPT_NAMES` holds a plain-English phrase per class for the zero-shot prompts; it
+is checked against the official names but worded for an embedding model (no "sp",
+no "CCA" abbreviation, a hint of colour or shape where that is what the code means).
+Codes missing from the tree fall back to their own code and are marked `sure=False`.
 """
+import json
+from pathlib import Path
+
+TAXONOMY_PATH = Path(__file__).with_name("taxonomy_tree.json")
 
 T1_GROUPS = {
     # code: (display name, prompt phrase); order = palette slot order
@@ -21,94 +30,139 @@ T1_GROUPS = {
     "MF": ("Mobile fauna", "a mobile animal such as a fish, urchin or sea cucumber"),
 }
 
-# code: (T1 group, long name, sure)
-T3 = {
-    "ACAS": ("CORAL", "Acanthastrea coral", True),
-    "ACBR": ("CORAL", "branching Acropora coral", True),
-    "ACTA": ("CORAL", "tabulate Acropora coral", True),
-    "ASPP": ("MA", "Asparagopsis red seaweed", True),
-    "ASSP": ("CORAL", "Astreopora coral", True),
-    "ASTS": ("CORAL", "Astrea coral", False),
-    "BGMA": ("MA", "blue-green algae (cyanobacteria) mat", True),
-    "BRMA": ("MA", "brown macroalgae", True),
-    "CAUL": ("MA", "Caulerpa green seaweed", True),
-    "CCAH": ("CCA", "crustose coralline algae on hard substrate", True),
-    "CCAR": ("CCA", "crustose coralline algae on rubble", False),
-    "CMOR": ("I", "corallimorph", True),
-    "COSP": ("CORAL", "Coscinaraea coral", True),
-    "CYPS": ("CORAL", "Cyphastrea coral", True),
-    "DICO": ("MA", "Dictyosphaeria green bubble algae", False),
-    "DICT": ("MA", "Dictyota brown seaweed", True),
-    "DISP": ("CORAL", "Diploastrea coral", False),
-    "ECHP": ("CORAL", "Echinophyllia coral", True),
-    "EMA": ("MA", "encrusting macroalgae", True),
-    "ENC": ("CORAL", "encrusting hard coral", False),
-    "FASP": ("CORAL", "Favia coral", True),
-    "FAVS": ("CORAL", "Favites coral", True),
-    "FINE": ("SED", "fine sediment", True),
-    "FOL": ("CORAL", "foliose hard coral", True),
-    "FREE": ("CORAL", "free-living mushroom coral", True),
-    "FUSP": ("CORAL", "Fungia mushroom coral", True),
-    "GASP": ("CORAL", "Galaxea coral", True),
-    "GOAL": ("CORAL", "Goniopora or Alveopora coral", True),
-    "GONS": ("CORAL", "Goniastrea coral", True),
-    "GRMA": ("MA", "green macroalgae", True),
-    "HALI": ("MA", "Halimeda calcareous green algae", True),
-    "HCOE": ("CORAL", "Heliopora blue coral", True),
-    "HYSP": ("CORAL", "Hydnophora coral", True),
-    "ISSP": ("CORAL", "Isopora coral", True),
-    "LEPT": ("CORAL", "Leptastrea coral", True),
-    "LOBO": ("MA", "Lobophora brown seaweed", True),
-    "LOBS": ("CORAL", "Lobophyllia coral", True),
-    "LPHY": ("CORAL", "Leptoria phrygia brain coral", True),
-    "MICR": ("MA", "Microdictyon green net algae", True),
-    "MISP": ("CORAL", "Millepora fire coral", True),
-    "MOBF": ("MF", "mobile fauna", True),
-    "MOBR": ("CORAL", "branching Montipora coral", True),
-    "MOEN": ("CORAL", "encrusting Montipora coral", True),
-    "MOFO": ("CORAL", "foliose Montipora coral", True),
-    "OCTO": ("SC", "octocoral soft coral", True),
-    "PADI": ("MA", "Padina brown seaweed", True),
-    "PAEN": ("CORAL", "encrusting Pavona coral", True),
-    "PAMA": ("CORAL", "massive Pavona coral", True),
-    "PESP": ("MA", "Peyssonnelia red encrusting algae", True),
-    "PHSP": ("CORAL", "PHSP hard coral", False),
-    "PLSP": ("CORAL", "Platygyra brain coral", True),
-    "POBR": ("CORAL", "branching Porites coral", True),
-    "POCS": ("CORAL", "Pocillopora coral", True),
-    "POEN": ("CORAL", "encrusting Porites coral", True),
-    "POFO": ("CORAL", "foliose Porites coral", True),
-    "POMA": ("CORAL", "massive Porites coral", True),
-    "PSSP": ("CORAL", "Psammocora coral", True),
-    "RDMA": ("MA", "red macroalgae", True),
-    "SAND": ("SED", "sand", True),
-    "SP": ("I", "sponge", True),
-    "STYS": ("CORAL", "Stylophora coral", True),
-    "TUN": ("I", "tunicate", True),
-    "TURFH": ("TURF", "turf algae on hard substrate", True),
-    "TURFR": ("TURF", "turf algae on rubble", True),
-    "TURS": ("CORAL", "Turbinaria coral", True),
-    "UPMA": ("MA", "upright macroalgae", True),
-    "ZO": ("I", "zoanthid", True),
+PROMPT_NAMES = {
+    "ACAS": "encrusting Acanthastrea coral",
+    "ACBR": "branching Acropora coral",
+    "ACTA": "tabulate Acropora table coral",
+    "ASPP": "Asparagopsis red seaweed",
+    "ASSP": "encrusting Astreopora coral",
+    "ASTS": "massive Astrea coral",
+    "BGMA": "blue-green algae (cyanobacteria) mat",
+    "BRMA": "brown macroalgae",
+    "CAUL": "Caulerpa green seaweed",
+    "CCAH": "crustose coralline algae on hard substrate",
+    "CCAR": "crustose coralline algae on rubble",
+    "CMOR": "corallimorph",
+    "COSP": "encrusting Coscinaraea coral",
+    "CYPS": "encrusting Cyphastrea coral",
+    "DICO": "Dictyopteris or Dictyota brown seaweed",
+    "DICT": "Dictyosphaeria green bubble algae",
+    "DISP": "massive Diploastrea coral",
+    "ECHP": "encrusting Echinopora coral",
+    "EMA": "encrusting macroalgae",
+    "ENC": "encrusting hard coral",
+    "FASP": "massive Favia coral",
+    "FAVS": "massive Favites coral",
+    "FINE": "fine sediment",
+    "FOL": "foliose hard coral",
+    "FREE": "free-living mushroom coral",
+    "FUSP": "Fungia mushroom coral",
+    "GASP": "Galaxea coral",
+    "GOAL": "Goniopora or Alveopora coral",
+    "GONS": "massive Goniastrea coral",
+    "GRMA": "green macroalgae",
+    "HALI": "Halimeda calcareous green algae",
+    "HCOE": "Heliopora blue coral",
+    "HYSP": "massive Hydnophora coral",
+    "ISSP": "Isopora coral",
+    "LEPT": "encrusting Leptastrea coral",
+    "LOBO": "Lobophora brown seaweed",
+    "LOBS": "massive Lobophyllia coral",
+    "LPHY": "Leptoria brain coral",
+    "MICR": "Microdictyon green net algae",
+    "MISP": "Millepora fire coral",
+    "MOBF": "mobile fauna",
+    "MOBR": "branching Montipora coral",
+    "MOEN": "encrusting Montipora coral",
+    "MOFO": "foliose Montipora coral",
+    "OCTO": "octocoral soft coral",
+    "PADI": "Padina brown seaweed",
+    "PAEN": "encrusting Pavona coral",
+    "PAMA": "massive Pavona coral",
+    "PESP": "Peyssonnelia red encrusting algae",
+    "PHSP": "encrusting Phymastrea coral",
+    "PLSP": "Platygyra brain coral",
+    "POBR": "branching Porites coral",
+    "POCS": "Pocillopora coral",
+    "POEN": "encrusting Porites coral",
+    "POFO": "foliose Porites coral",
+    "POMA": "massive Porites coral",
+    "PSSP": "encrusting Psammocora coral",
+    "RDMA": "red macroalgae",
+    "SAND": "sand",
+    "SP": "sponge",
+    "STYS": "Stylophora coral",
+    "TUN": "tunicate",
+    "TURFH": "turf algae on hard substrate",
+    "TURFR": "turf algae on rubble",
+    "TURS": "Turbinaria coral",
+    "UPMA": "upright macroalgae",
+    "ZO": "zoanthid",
 }
 
 PROMPT_TEMPLATE = "An underwater close-up photo of {name} on a coral reef."
 
 
+def _split(node_name: str) -> tuple[str, str]:
+    code, _, name = node_name.partition(" - ")
+    return code.strip(), (name or code).strip()
+
+
+def load_tree(path: Path = TAXONOMY_PATH) -> dict[str, dict]:
+    """code -> {t1, t2, t2_name, t2b, t2b_name, name} for every leaf in the tree."""
+    out: dict[str, dict] = {}
+
+    def walk(node: dict, path: dict) -> None:
+        tier = node["tier"]
+        if tier == "CODE":
+            out[node["name"]] = path
+            return
+        if tier != "TIER0":
+            code, name = _split(node["name"])
+            key = {"TIER_1": "t1", "TIER_2": "t2", "TIER_2b": "t2b", "TIER_3": "t3"}[tier]
+            path = {**path, key: code, key + "_name": name}
+        for child in node.get("children", []):
+            walk(child, path)
+
+    walk(json.loads(path.read_text()), {})
+    return {code: {"t1": p["t1"], "t2": p["t2"], "t2_name": p["t2_name"], "t2b": p["t2b"],
+                   "t2b_name": p["t2b_name"], "name": p["t3_name"]} for code, p in out.items()}
+
+
+TAXONOMY = load_tree()
+_overrides: dict[str, dict] = {}
+
+
+def info(code: str) -> dict:
+    """Taxonomy entry for a class, with --labels-csv overrides applied. `sure` is False for
+    codes the tree does not know (their name is just the code)."""
+    base = TAXONOMY.get(code) or {"t1": "UNK", "t2": code, "t2_name": code, "t2b": code,
+                                  "t2b_name": code, "name": code}
+    return {**base, "sure": code in TAXONOMY or code in _overrides,
+            "prompt": PROMPT_NAMES.get(code, base["name"]), **_overrides.get(code, {})}
+
+
 def group_of(code: str) -> str:
-    return T3.get(code, ("UNK", code, False))[0]
+    return info(code)["t1"]
 
 
 def name_of(code: str) -> str:
-    return T3.get(code, ("UNK", code, False))[1]
+    return info(code)["name"]
+
+
+def prompt_of(code: str) -> str:
+    return info(code)["prompt"]
 
 
 def load_overrides(path: str) -> None:
-    """CSV with columns code,name[,group] to override/add entries."""
+    """CSV with columns code,name[,group] to override/add entries. The name is used for
+    display and for the zero-shot prompt."""
     import csv
 
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
-            code = row["code"].strip()
-            grp = row.get("group") or group_of(code)
-            T3[code] = (grp, row["name"].strip(), True)
+            code, name = row["code"].strip(), row["name"].strip()
+            o = {"name": name, "prompt": name}
+            if row.get("group"):
+                o["t1"] = row["group"].strip()
+            _overrides[code] = o
