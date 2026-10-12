@@ -1,0 +1,112 @@
+# Tide Pool
+
+An interactive explorer for **[EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2)** image embeddings of the
+**[NOAA Pacific benthic cover, Tier 3](https://huggingface.co/datasets/NMFS-OSI/noaa-pacific-benthic-cover-t3)** patches.
+It shows more than the embedding cloud. You can also see the image patches themselves, the full survey photo each patch was cut from, model diagnostics and the survey metadata.
+
+```
+pipeline/build.py   sample → download → join metadata → embed → analyse → web/data/
+server/app.py       serves web/ and embeds text / image queries with the same model
+web/                dependency-free canvas app (no build step)
+```
+
+## Quick start
+
+```bash
+pip install -r requirements.txt
+huggingface-cli login                       # if the model requires accepting its terms
+
+python pipeline/build.py --n 6000           # ~6k patches, balanced across 67 classes
+python server/app.py                        # → http://localhost:8000
+```
+
+On a GPU, 6,000 patches embed in a minute or two. On CPU it takes longer, roughly 10–20 minutes. Every stage caches its output under
+`data/cache/`, so if you raise `--n` later, only the new patches are downloaded and embedded.
+
+To check the UI without downloading the model, run `python pipeline/build.py --n 600 --embedder stub`. The stub uses
+colour and texture features, not semantic embeddings, and the app shows a banner while it's in use.
+
+## Data source
+
+The pipeline reads the public bucket behind the HF dataset directly, with no credentials:
+
+```
+gs://nmfs_odp_pifsc/PIFSC/ESD/ARP/pifsc-ai-data-repository/coralnet_mirror/
+  pacific_t3_splits/{train,val,test}/<T3 code>/<code>_<site>_<year>_A_<photo>_<point>.png   378,680 crops, 224×224
+  pacific_t1/<T1 code>/…                       same files grouped by the 8 broad classes (gives the T3→T1 map)
+  ESD_REA_{HAWAII,MARIANA,SAMOA_PRIA}_v2/
+    *_annotation(s).csv                         per-point metadata
+    images/<site>_<year>_A_<photo>.JPG          full-resolution quadrat photos
+```
+
+Each crop is joined to its annotation row by photo name and point order. The `_<point>` suffix is the point's 1-based
+position within its photo in the CSV, and the crop is centred exactly on that row's `Row`/`Column`. About 99.8% of
+crops join, which adds lat/lon, region, island, site, date, depth and CoralNet's top-5 machine suggestions.
+
+## What the app shows
+
+**Views:** UMAP 2D, UMAP 3D (orbit), t-SNE, PCA, and a **Map** that plots the survey coordinates (lon wrapped across the antimeridian).
+
+**Rendering:** dots, or the **image patches themselves** drawn from sprite sheets. Patch borders are coloured by the
+current encoding.
+
+**Colour by:**
+
+| | |
+|---|---|
+| Labels | T1 group, T3 class (hue = group, lightness = class) |
+| Model behaviour | search similarity, neighbour-label agreement, linear-probe / k-NN / zero-shot correctness and predicted group, probe confidence, atypicality, similarity to class centroid, k-means cluster |
+| Survey metadata | split, region, island, year, depth, whether CoralNet's suggestion agrees, CoralNet confidence |
+| Pixels | true mean colour, dominant hue, brightness, contrast, saturation, colourfulness, sharpness, texture entropy |
+
+**Interactions:**
+
+- **Hover** for a thumbnail.
+- **Click** for the detail panel: the 224px patch, survey fields, linear-probe top-5, zero-shot top-5 against class text descriptions, CoralNet suggestions, the 12 nearest neighbours (red outline = different label), and pixel statistics.
+- **Show in photo** opens the full quadrat photo, zoomed to the point, with every sampled patch from that photo outlined.
+- **Shift-drag** to lasso a set of patches into a gallery with its class composition. You can export it to CSV.
+- **Search:** with the server running, search by free text (EmbeddingGemma's `SearchQuery` prompt) or by uploading an image. Without the server, a class code or name is searched with its build-time text prototype. **Find similar** (or the `s` key) ranks every patch by cosine similarity to the selected one.
+
+**Tabs:**
+
+- **Classes:** sortable per-class table of neighbour agreement, probe, k-NN, zero-shot and CoralNet accuracy.
+- **Confusions:** T1 matrix plus the most frequent T3 confusions for each predictor, all clickable.
+- **Clusters:** k-means cards showing purity and their most typical patches.
+- **About:** headline metrics.
+
+## Model notes
+
+- Loaded through `sentence-transformers>=6.1` with `config_kwargs={"audio_config": None}`, so only the text and vision
+  encoders are loaded. If the loader rejects that option, the pipeline falls back to the full model.
+- Uses bf16 on CUDA and fp32 elsewhere, because the model card warns that fp16 overflows.
+- Images are encoded as `{"image": PIL.Image}` with no prompt. Class descriptions use the `Document` prompt and search
+  queries use `SearchQuery`, when the model exposes those prompt names.
+- Matryoshka: `--dim` (768/512/256/128) sets the dimension used for analysis. `--web-dim` (default 256) sets what's shipped to the
+  browser for client-side similarity. Vectors are truncated and then re-normalised.
+- The linear probe is out-of-fold logistic regression with `StratifiedGroupKFold` grouped by source photo, so
+  patches from one photo never sit on both sides of a fold.
+
+## Build options
+
+```
+--n 6000                  patches to sample          --strategy balanced|proportional
+--splits train,val,test   which splits to draw from  --seed 7
+--dim 768 --web-dim 256   Matryoshka dimensions      --k 12  neighbours per patch
+--clusters 0              k-means k (0 = auto)       --skip-tsne
+--copy-crops              bundle 224px crops locally (otherwise loaded from the public bucket)
+--labels-csv names.csv    override class names (code,name[,group])
+--embedder gemma|stub     --model google/embeddinggemma-2   --device cuda|mps|cpu
+```
+
+The long class names in `pipeline/labels.py` are my best-effort expansion of the PIFSC codes, and they also drive the zero-shot
+prompts. Names marked `sure=False` (shown with "?" in the app) are guesses: ASTS, CCAR, DICO, DISP, ENC and PHSP.
+If you have the official code list, correct them there or pass `--labels-csv`.
+
+`web/` is static, so `web/` plus a built `web/data/` can be hosted anywhere, GitHub Pages included. Without the server, free-text and
+image search are disabled.
+
+## Tests
+
+```bash
+python -m pytest tests
+```

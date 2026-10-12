@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tide Pool</title>
+<meta name="description" content="Explore EmbeddingGemma 2 embeddings of NOAA Pacific benthic image patches.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%232a78d6'/><circle cx='11' cy='13' r='3' fill='%23eb6834'/><circle cx='20' cy='18' r='4' fill='%231baf7a'/><circle cx='14' cy='22' r='2' fill='%23eda100'/></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true"></span>
+    <div>
+      <h1>Tide Pool</h1>
+      <p class="sub" id="subtitle">Loading…</p>
+    </div>
+  </div>
+  <form class="search" id="searchForm" autocomplete="off">
+    <input id="q" type="search" placeholder="Search patches by text, e.g. “bleached branching coral”" aria-label="Text search">
+    <label class="btn icon" id="uploadBtn" title="Search by image (needs the server)">
+      <input id="upload" type="file" accept="image/*" hidden>
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
+    </label>
+    <button class="btn" type="submit">Search</button>
+  </form>
+  <div class="status">
+    <span class="chip" id="modelChip" title="Embedding model">model</span>
+    <span class="chip" id="serverChip" title="Search server">server…</span>
+  </div>
+</header>
+
+<div class="banner" id="stubBanner" hidden>
+  This bundle was built with the <b>stub embedder</b> (colour/texture features) for testing.
+  Run <code>python pipeline/build.py</code> without <code>--embedder stub</code> to use EmbeddingGemma&nbsp;2.
+</div>
+
+<nav class="toolbar">
+  <div class="seg" id="viewSeg" role="tablist" aria-label="Projection"></div>
+  <label class="field">Colour
+    <select id="colorBy"></select>
+  </label>
+  <div class="seg" id="renderSeg" aria-label="Render">
+    <button data-v="dots" class="on">Dots</button>
+    <button data-v="patches">Patches</button>
+  </div>
+  <label class="field">Size <input id="size" type="range" min="1" max="10" value="4"></label>
+  <label class="check"><input type="checkbox" id="labelsToggle" checked> Labels</label>
+  <label class="check" id="spinWrap" hidden><input type="checkbox" id="spin" checked> Spin</label>
+  <span class="spacer"></span>
+  <div class="filters" id="splitFilters" aria-label="Split filter"></div>
+  <span class="chip query" id="queryChip" hidden><span id="queryText"></span><button id="clearQuery" aria-label="Clear search">×</button></span>
+  <button class="btn ghost" id="resetView" title="Reset view (R)">Reset</button>
+</nav>
+
+<main class="layout">
+  <aside class="legend" id="legend" aria-label="Legend"></aside>
+  <section class="stage" id="stage">
+    <canvas id="plot"></canvas>
+    <div class="hint" id="hint">Scroll to zoom · drag to pan · <b>Shift</b>-drag to lasso · click a point for details</div>
+    <div class="tooltip" id="tooltip" hidden></div>
+    <div class="loading" id="loading">Loading embeddings…</div>
+  </section>
+  <aside class="detail" id="detail" hidden aria-label="Patch details"></aside>
+</main>
+
+<section class="drawer" id="drawer">
+  <div class="tabs" role="tablist">
+    <button data-tab="gallery" class="on">Gallery <span class="count" id="galleryCount"></span></button>
+    <button data-tab="classes">Classes</button>
+    <button data-tab="confusion">Confusions</button>
+    <button data-tab="clusters">Clusters</button>
+    <button data-tab="about">About</button>
+    <span class="spacer"></span>
+    <button class="btn ghost" id="drawerToggle" aria-label="Collapse panel">▾</button>
+  </div>
+  <div class="tabbody" id="tab-gallery"></div>
+  <div class="tabbody" id="tab-classes" hidden></div>
+  <div class="tabbody" id="tab-confusion" hidden></div>
+  <div class="tabbody" id="tab-clusters" hidden></div>
+  <div class="tabbody" id="tab-about" hidden></div>
+</section>
+
+<dialog id="contextDlg">
+  <div class="dlg-head">
+    <b id="ctxTitle"></b>
+    <span class="muted" id="ctxInfo"></span>
+    <span class="spacer"></span>
+    <a id="ctxOpen" target="_blank" rel="noopener">Open original</a>
+    <button class="btn ghost" id="ctxClose" aria-label="Close">×</button>
+  </div>
+  <div class="ctx-wrap"><canvas id="ctxCanvas"></canvas><div class="loading" id="ctxLoading">Loading full photo (~10 MB)…</div></div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
