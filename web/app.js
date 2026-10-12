@@ -890,7 +890,7 @@ async function openContext(i) {
     view.x = (img.naturalWidth / 2 - P.col[i]) * s; view.y = (img.naturalHeight / 2 - P.row[i]) * s;
     render();
   };
-  img.onerror = () => { $("#ctxLoading").textContent = "Could not load the full photo."; };
+  img.onerror = () => { $("#ctxLoading").textContent = "This page can’t load the photo from the NOAA bucket (some hosts block outside images). Use “Open original” to view it in a new tab."; };
   img.src = url;
   let dr = null;
   cv.onpointerdown = e => { dr = { x: e.clientX - view.x, y: e.clientY - view.y }; cv.setPointerCapture(e.pointerId); };
