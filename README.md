@@ -6,8 +6,10 @@ It shows more than the embedding cloud. You can also see the image patches thems
 
 ```
 pipeline/build.py   sample → download → join metadata → embed → analyse → web/data/
+pipeline/export.py  optional Parquet + Zarr export of the same build (--export DIR)
 server/app.py       serves web/ and embeds text / image queries with the same model
 web/                dependency-free canvas app (no build step)
+docker-compose.yml  build / app / pages services (docker-compose.gpu.yml for NVIDIA)
 ```
 
 ## Quick start
@@ -107,7 +109,8 @@ gs://nmfs_odp_pifsc/PIFSC/ESD/ARP/pifsc-ai-data-repository/coralnet_mirror/
 
 Each crop is joined to its annotation row by photo name and point order. The `_<point>` suffix is the point's 1-based
 position within its photo in the CSV, and the crop is centred exactly on that row's `Row`/`Column`. About 99.8% of
-crops join, which adds lat/lon, region, island, site, date, depth and CoralNet's top-5 machine suggestions.
+crops join, which adds lat/lon, region, island, site, date and CoralNet's top-5 machine suggestions. The source CSVs
+have a `Depth` column, but it is empty in all three, so depth shows as blank in the app and the export.
 
 ## What the app shows
 
@@ -178,5 +181,6 @@ image search are disabled.
 ## Tests
 
 ```bash
+pip install pytest
 python -m pytest tests
 ```
