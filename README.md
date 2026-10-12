@@ -6,8 +6,10 @@ It shows more than the embedding cloud. You can also see the image patches thems
 
 ```
 pipeline/build.py   sample → download → join metadata → embed → analyse → web/data/
+pipeline/export.py  optional Parquet + Zarr export of the same build (--export DIR)
 server/app.py       serves web/ and embeds text / image queries with the same model
 web/                dependency-free canvas app (no build step)
+docker-compose.yml  build / app / pages services (docker-compose.gpu.yml for NVIDIA)
 ```
 
 ## Quick start
@@ -26,6 +28,72 @@ On a GPU, 6,000 patches embed in a minute or two. On CPU it takes longer, roughl
 To check the UI without downloading the model, run `python pipeline/build.py --n 600 --embedder stub`. The stub uses
 colour and texture features, not semantic embeddings, and the app shows a banner while it's in use.
 
+## Docker
+
+```bash
+export HF_TOKEN=hf_...                                   # if the model requires accepting its terms
+docker compose run --rm build --n 6000                   # writes ./web/data, caches in ./data
+docker compose up -d app                                 # → http://localhost:8000 (with search)
+docker compose --profile pages up pages                  # → http://localhost:8080 (static, as on GitHub Pages)
+```
+
+`build` takes the same flags as `pipeline/build.py` (for a quick test without the model: `--n 600 --embedder stub`).
+The image uses CPU torch. On an NVIDIA GPU (with the NVIDIA Container Toolkit installed), add the override file to every
+command: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml run --rm build --n 6000`. Downloaded model
+weights are kept in the `hf-cache` volume, so they aren't downloaded again.
+
+## Hosting on GitHub Pages
+
+A build is self-contained: everything the app needs is in `web/`, so `web/` can be served by any static host.
+Patch crops and full survey photos still load from NOAA's public bucket. Free-text and image search need the server, so
+on a static host they are off and search falls back to class names.
+
+`web/data/` is git-ignored, so publish it explicitly, for example from a `gh-pages` branch (needs git 2.42 or newer):
+
+```bash
+python pipeline/build.py --n 6000                        # or the docker compose build above
+git worktree add --orphan -b gh-pages ../tide-pool-pages
+cp -r web/. ../tide-pool-pages/ && touch ../tide-pool-pages/.nojekyll
+cd ../tide-pool-pages && git add -A && git commit -m "Publish bundle" && git push -u origin gh-pages
+```
+
+Then set Settings → Pages → *Deploy from a branch* → `gh-pages` / root.
+
+Only the sampled patches are embedded and shipped, not all 378,680. A bundle costs about 3 KB per patch (1 KB of
+that is the 256-d embedding), so 6,000 patches is about 18 MB and 30,000 is about 90 MB. GitHub rejects files over
+100 MB, which `embeddings.f32` reaches at about 100,000 patches with `--web-dim 256`, or about 200,000 with
+`--web-dim 128`. Pages sites are limited to 1 GB. Every visitor also downloads the whole bundle, so a few tens of
+thousands of patches is a practical ceiling.
+
+## Cloud-native export (Parquet + Zarr)
+
+`--export DIR` also writes the build as a dataset that can be read in pieces over HTTP:
+
+```
+DIR/metadata.parquet   one row per patch: gcs_uri, split, label, T1/T2/T2b, site, island, date, lat/lon,
+                       point position in the photo, CoralNet suggestion, k-means cluster, UMAP/PCA/t-SNE coords
+DIR/embeddings.zarr    float16 (n_patches, 768), L2-normalised, 1,024-row chunks; row i = metadata row i
+```
+
+```bash
+python pipeline/build.py --n 6000 --export data/export
+docker compose run --rm build --n 6000 --export data/export      # ./data is mounted, so it lands on the host
+```
+
+Upload `DIR` to a bucket or a Hugging Face dataset repo, then read only what you need:
+
+```python
+import pandas as pd, zarr                     # remote reads also need fsspec and aiohttp
+base = "https://huggingface.co/datasets/<you>/<repo>/resolve/main"
+meta = pd.read_parquet(f"{base}/metadata.parquet")
+emb = zarr.open_array(f"{base}/embeddings.zarr", mode="r")
+v = emb[1234]                                 # downloads one 1.5 MB chunk, not the whole array
+```
+
+Each Zarr chunk is its own file, so any static host works, with no range-request support needed. For a shorter
+Matryoshka vector, take the first `d` columns and re-normalise. With `--n 378680` the export covers the whole dataset
+(about 580 MB of embeddings). The browser bundle in `web/data` should stay much smaller (see above).
+
 ## Data source
 
 The pipeline reads the public bucket behind the HF dataset directly, with no credentials:
@@ -41,7 +109,8 @@ gs://nmfs_odp_pifsc/PIFSC/ESD/ARP/pifsc-ai-data-repository/coralnet_mirror/
 
 Each crop is joined to its annotation row by photo name and point order. The `_<point>` suffix is the point's 1-based
 position within its photo in the CSV, and the crop is centred exactly on that row's `Row`/`Column`. About 99.8% of
-crops join, which adds lat/lon, region, island, site, date, depth and CoralNet's top-5 machine suggestions.
+crops join, which adds lat/lon, region, island, site, date and CoralNet's top-5 machine suggestions. The source CSVs
+have a `Depth` column, but it is empty in all three, so depth shows as blank in the app and the export.
 
 ## What the app shows
 
@@ -94,6 +163,7 @@ current encoding.
 --dim 768 --web-dim 256   Matryoshka dimensions      --k 12  neighbours per patch
 --clusters 0              k-means k (0 = auto)       --skip-tsne
 --copy-crops              bundle 224px crops locally (otherwise loaded from the public bucket)
+--export DIR              also write metadata.parquet + embeddings.zarr (see above)
 --labels-csv names.csv    override class names (code,name[,group])
 --embedder gemma|stub     --model google/embeddinggemma-2   --device cuda|mps|cpu
 ```
@@ -111,5 +181,6 @@ image search are disabled.
 ## Tests
 
 ```bash
+pip install pytest
 python -m pytest tests
 ```

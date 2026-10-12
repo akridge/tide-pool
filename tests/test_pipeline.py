@@ -81,3 +81,30 @@ def test_labels_csv_override(tmp_path, monkeypatch):
     labels.load_overrides(str(f))
     assert labels.name_of("SP") == "demosponge" and labels.prompt_of("SP") == "demosponge"
     assert labels.group_of("SP") == "I"
+
+
+def test_export_round_trip(tmp_path):
+    import export
+    import pyarrow.parquet as pq
+    import zarr
+
+    n = 5
+    s = pd.DataFrame({"object": [f"x/train/SP/SP_A-1_2020_A_1_{i}.png" for i in range(n)],
+                      "file": [f"SP_A-1_2020_A_1_{i}.png" for i in range(n)], "split": "train",
+                      "label": ["SP", "SP", "POMA", "POMA", "SAND"], "site": "A-1", "island_code": "A",
+                      "year": 2020, "image_name": "A-1_2020_A_1.JPG", "point": range(1, n + 1),
+                      "Latitude": [1.5, None, 2.0, 2.0, 3.0], "Row": [10, None, 30, 40, 50]})
+    emb = build.matryoshka(np.random.default_rng(0).standard_normal((n, 768)), 768)
+    proj = {"umap": np.arange(2 * n).reshape(n, 2), "umap3d": np.zeros((n, 3))}
+    meta = export.metadata_frame(s, {c: labels.info(c) for c in s.label.unique()}, "bkt",
+                                 np.arange(n), proj)
+    export.write_dataset(tmp_path, meta, emb, {"model": "test"})
+
+    back = pd.read_parquet(tmp_path / "metadata.parquet")
+    assert list(back.row) == list(range(n)) and list(back.t2b[2:4]) == ["POSP", "POSP"]
+    assert back.gcs_uri[0] == "gs://bkt/" + s.object[0] and pd.isna(back.lat[1]) and pd.isna(back.photo_row[1])
+    assert {"umap_x", "umap_y"} <= set(back.columns) and "umap3d_x" not in back.columns
+    assert b"tide_pool" in pq.read_schema(tmp_path / "metadata.parquet").metadata
+    z = zarr.open_array(str(tmp_path / "embeddings.zarr"), mode="r")
+    assert z.shape == (n, 768) and z.dtype == np.float16 and z.attrs["model"] == "test"
+    assert np.allclose(z[3], emb[3], atol=1e-3)

@@ -1,0 +1,52 @@
+# Tide Pool stack. Build data first, then serve it:
+#
+#   docker compose run --rm build --n 6000            # EmbeddingGemma 2 (needs HF_TOKEN)
+#   docker compose run --rm build --n 600 --embedder stub
+#   docker compose up app                             # http://localhost:8000
+#   docker compose --profile pages up pages           # static preview, as on GitHub Pages: http://localhost:8080
+#
+# On an NVIDIA GPU add the override:  docker compose -f docker-compose.yml -f docker-compose.gpu.yml ...
+# The bundle lands in ./web/data and the per-stage cache in ./data on the host, so both survive
+# the containers and web/ can be published as-is.
+
+x-tide-pool: &tide-pool
+  image: tide-pool
+  build:
+    context: .
+    args:
+      TORCH_INDEX: ${TORCH_INDEX:-https://download.pytorch.org/whl/cpu}
+  environment:
+    HF_TOKEN: ${HF_TOKEN:-}
+  volumes:
+    - ./data:/app/data
+    - ./web/data:/app/web/data
+    - hf-cache:/cache/huggingface
+
+services:
+  build:
+    <<: *tide-pool
+    profiles: ["build"]
+    entrypoint: ["python", "pipeline/build.py"]
+    command: ["--n", "6000"]
+
+  app:
+    <<: *tide-pool
+    ports:
+      - "${PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+    restart: unless-stopped
+
+  pages:
+    # plain static file server, no search API: shows exactly what GitHub Pages will serve
+    <<: *tide-pool
+    profiles: ["pages"]
+    command: ["python", "-m", "http.server", "8080", "--directory", "web"]
+    ports:
+      - "${PAGES_PORT:-8080}:8080"
+
+volumes:
+  hf-cache:

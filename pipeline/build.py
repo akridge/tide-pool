@@ -29,6 +29,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
 import embedders  # noqa: E402
+import export  # noqa: E402
 import gcs  # noqa: E402
 import labels as L  # noqa: E402
 
@@ -319,6 +320,8 @@ def main() -> None:
     ap.add_argument("--labels-csv", help="CSV (code,name[,group]) overriding class names")
     ap.add_argument("--refresh-index", action="store_true")
     ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--export", metavar="DIR",
+                    help="also write metadata.parquet + embeddings.zarr (full dimension) to DIR")
     args = ap.parse_args()
 
     if args.labels_csv:
@@ -395,9 +398,10 @@ def main() -> None:
         proj["geo"] = geo
 
     # ---------------------------------------------------------------- write bundle
-    if OUT.exists():
-        shutil.rmtree(OUT)
-    OUT.mkdir(parents=True)
+    # empty web/data rather than delete it: it may be a mount point (docker compose)
+    OUT.mkdir(parents=True, exist_ok=True)
+    for old in OUT.iterdir():
+        shutil.rmtree(old) if old.is_dir() else old.unlink()
     log("sprites ...")
     sheets = write_sprites(paths, OUT)
     if args.copy_crops:
@@ -525,6 +529,16 @@ def main() -> None:
     (OUT / "points.json").write_text(json.dumps(points, separators=(",", ":")))
     log("metrics: " + json.dumps({k: round(v, 3) for k, v in manifest["metrics"].items()}))
     log(f"wrote {OUT} ({sum(f.stat().st_size for f in OUT.rglob('*')) / 1e6:.1f} MB)")
+
+    if args.export:
+        dest = Path(args.export)
+        log(f"exporting parquet + zarr to {dest} ...")
+        meta = export.metadata_frame(s, {c: L.info(c) for c in codes}, gcs.BUCKET, cluster, proj)
+        export.write_dataset(dest, meta, full, {
+            "model": emb.name, "model_is_stub": args.embedder == "stub",
+            "dataset": manifest["dataset"], "bucket": gcs.BUCKET, "built": manifest["built"],
+            "strategy": args.strategy, "seed": args.seed})
+        log(f"wrote {dest} ({sum(f.stat().st_size for f in dest.rglob('*')) / 1e6:.1f} MB)")
 
 
 if __name__ == "__main__":
