@@ -186,7 +186,7 @@ button, select, input { font: inherit; color: inherit; }
 table.t { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 table.t th, table.t td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
 table.t th { position: sticky; top: -10px; background: var(--surface); color: var(--muted); font-weight: 600; cursor: pointer; font-size: 12px; }
-table.t th:nth-child(-n+3), table.t td:nth-child(-n+3) { text-align: left; }
+table.t th:nth-child(-n+4), table.t td:nth-child(-n+4) { text-align: left; }
 table.t tbody tr { cursor: pointer; }
 table.t tbody tr:hover { background: var(--surface-2); }
 table.t .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
