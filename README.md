@@ -54,7 +54,7 @@ current encoding.
 
 | | |
 |---|---|
-| Labels | T1 group, T3 class (hue = group, lightness = class) |
+| Labels | T1 group, T2 growth form, T2b genus, T3 class (hue = T1 group, lightness = finer level) |
 | Model behaviour | search similarity, neighbour-label agreement, linear-probe / k-NN / zero-shot correctness and predicted group, probe confidence, atypicality, similarity to class centroid, k-means cluster |
 | Survey metadata | split, region, island, year, depth, whether CoralNet's suggestion agrees, CoralNet confidence |
 | Pixels | true mean colour, dominant hue, brightness, contrast, saturation, colourfulness, sharpness, texture entropy |
@@ -98,9 +98,12 @@ current encoding.
 --embedder gemma|stub     --model google/embeddinggemma-2   --device cuda|mps|cpu
 ```
 
-The long class names in `pipeline/labels.py` are my best-effort expansion of the PIFSC codes, and they also drive the zero-shot
-prompts. Names marked `sure=False` (shown with "?" in the app) are guesses: ASTS, CCAR, DICO, DISP, ENC and PHSP.
-If you have the official code list, correct them there or pass `--labels-csv`.
+Class names and the hierarchy come from the PIFSC taxonomy tree in `pipeline/taxonomy_tree.json`:
+T1 broad group → T2 growth form / type (encrusting, branching, massive, upright macroalga, …) → T2b genus / subgroup
+(Porites sp, Montipora sp, …) → T3 class. The app can colour by T2 and T2b as well as T1 and T3. The zero-shot prompts use
+the plain-English phrases in `PROMPT_NAMES` in `pipeline/labels.py`, which follow the official names. A code
+missing from the tree is shown with "?" in the app, and a test fails if any dataset code is missing. To rename classes for
+one build, pass `--labels-csv`.
 
 `web/` is static, so `web/` plus a built `web/data/` can be hosted anywhere, GitHub Pages included. Without the server, free-text and
 image search are disabled.

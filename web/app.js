@@ -99,6 +99,9 @@ function derive() {
   P.cn_agree = P.cn_pred.map((c, i) => c == null ? null : (c === M.classes[P.label[i]].code ? 1 : 0));
   P.depthNum = P.depth;
   P.group_name = P.group.map(g => M.groups[g].code);
+  // taxonomy levels between T1 and T3 (older bundles have none: shown as Unknown)
+  P.t2 = P.label.map(c => M.classes[c].t2 ?? null);
+  P.t2b = P.label.map(c => M.classes[c].t2b ?? null);
   // per-class means of quality signals (for the Classes tab)
   const C = M.classes.map(() => ({ n: 0, agree: 0, lp: 0, zs: 0, knn: 0, cn: 0, cnN: 0, atyp: 0 }));
   for (let i = 0; i < S.N; i++) {
@@ -116,19 +119,34 @@ function derive() {
 }
 
 /* ---------------------------------------------------------------- colour encodings */
-function classColors() {
-  // T3 classes: hue from their T1 group's palette slot, lightness spread within the group
-  const pal = CAT[theme()], out = [];
+function nestedColors(keys, groupOf) {
+  // hue from each key's T1 group palette slot, lightness spread within the group
+  const pal = CAT[theme()], out = new Map();
   const byGroup = new Map();
-  S.M.classes.forEach((c, i) => { if (!byGroup.has(c.group)) byGroup.set(c.group, []); byGroup.get(c.group).push(i); });
-  for (const [g, idx] of byGroup) {
+  keys.forEach(k => { const g = groupOf(k); if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g).push(k); });
+  for (const [g, ks] of byGroup) {
     const [hh, ss, ll] = hexToHsl(pal[g % pal.length]);
-    idx.forEach((ci, j) => {
-      const t = idx.length === 1 ? 0 : j / (idx.length - 1) - .5;
-      out[ci] = `hsl(${(hh + t * 16).toFixed(0)} ${ss.toFixed(0)}% ${Math.max(22, Math.min(78, ll + t * 34)).toFixed(0)}%)`;
+    ks.forEach((k, j) => {
+      const t = ks.length === 1 ? 0 : j / (ks.length - 1) - .5;
+      out.set(k, `hsl(${(hh + t * 16).toFixed(0)} ${ss.toFixed(0)}% ${Math.max(22, Math.min(78, ll + t * 34)).toFixed(0)}%)`);
     });
   }
   return out;
+}
+function classColors() {
+  const m = nestedColors(S.M.classes.map((_, i) => i), i => S.M.classes[i].group);
+  return S.M.classes.map((_, i) => m.get(i));
+}
+// T2 / T2b levels: code -> {name, group}, taken from the classes that carry them
+function taxLevel(level) {
+  const out = new Map();
+  S.M.classes.forEach(c => { if (c[level] != null && !out.has(c[level])) out.set(c[level], { name: c[level + "_name"], group: c.group }); });
+  return out;
+}
+function taxCategorical(level) {
+  const lv = taxLevel(level), keys = [...lv.keys()].sort((a, b) => lv.get(a).group - lv.get(b).group || a.localeCompare(b));
+  const cc = nestedColors(keys, k => lv.get(k).group);
+  return categorical(S.P[level], { sort: (a, b) => keys.indexOf(a) - keys.indexOf(b), label: k => k, colorOf: k => cc.get(k), max: 999 });
 }
 
 function categorical(values, opts = {}) {
@@ -170,6 +188,8 @@ const COLOR_BY = [
   { group: "Labels" },
   { key: "group", label: "T1 group (broad)", build: () => categorical(S.P.group, { sort: (a, b) => a - b, label: g => S.M.groups[g].name, max: 8 }) },
   { key: "label", label: "T3 class (fine)", build: () => { const cc = classColors(); return categorical(S.P.label, { sort: (a, b) => a - b, label: c => `${S.M.classes[c].code}`, colorOf: c => cc[c], max: 999 }); } },
+  { key: "t2", label: "T2 growth form / type", build: () => taxCategorical("t2") },
+  { key: "t2b", label: "T2b genus / subgroup", build: () => taxCategorical("t2b") },
   { group: "Model behaviour" },
   { key: "score", label: "Search similarity", build: () => S.scores ? numeric(S.scores, { desc: "cosine similarity to the current query" }) : null },
   { key: "knn_agree", label: "Neighbour label agreement", build: () => numeric(S.P.knn_agree, { lo: 0, hi: 1, fmt: pct, desc: `share of the ${S.M.k} nearest neighbours with the same T3 label. Low = ambiguous or possibly mislabelled.` }) },
@@ -628,6 +648,9 @@ function renderLegend() {
     return;
   }
   const hid = hiddenSet();
+  const tax = S.colorBy === "t2" || S.colorBy === "t2b" ? taxLevel(S.colorBy) : null;
+  const nested = S.colorBy === "label" ? { name: k => S.M.classes[k].name, group: k => S.M.classes[k].group }
+    : tax ? { name: k => tax.get(k).name, group: k => tax.get(k).group } : null;
   el.append(h("div", { class: "actions" },
     h("button", { onclick: () => { hid.clear(); computeVisible(); renderLegend(); S.dirty = true; } }, "Show all"),
     h("button", { onclick: () => { ENC.levels.forEach((_, i) => hid.add(i)); computeVisible(); renderLegend(); S.dirty = true; } }, "Hide all")));
@@ -638,11 +661,11 @@ function renderLegend() {
     onmouseenter: () => { S.isolate = id; S.dirty = true; },
     onmouseleave: () => { S.isolate = null; S.dirty = true; },
   }, h("span", { class: "sw", style: { background: l.color } }),
-    h("span", { class: "lab" }, l.label, S.colorBy === "label" && !l.other ? h("small", {}, ` ${S.M.classes[l.key].name}`) : null),
+    h("span", { class: "lab" }, l.label, nested && !l.other ? h("small", {}, ` ${nested.name(l.key)}`) : null),
     h("span", { class: "n" }, l.n));
-  if (S.colorBy === "label") { // group the 60+ fine classes under their T1 group
+  if (nested) { // group fine levels under their T1 group
     S.M.groups.forEach((g, gi) => {
-      const ids = ENC.levels.map((l, id) => [l, id]).filter(([l]) => !l.other && S.M.classes[l.key].group === gi);
+      const ids = ENC.levels.map((l, id) => [l, id]).filter(([l]) => !l.other && nested.group(l.key) === gi);
       if (!ids.length) return;
       el.append(h("div", { class: "grp" }, g.name), ...ids.map(([l, id]) => item(l, id)));
     });
@@ -747,6 +770,13 @@ function photoUrl(i) {
   return `https://storage.googleapis.com/${S.M.bucket}/${S.M.mirror}/${P.source[i]}/images/${encodeURIComponent(P.image_name[i])}`;
 }
 
+function taxPath(c, g) {
+  // drop levels that only repeat the one above or the class itself (e.g. Sponge › Sponge)
+  const parts = [g.name];
+  for (const n of [c.t2_name, c.t2b_name]) if (n && n !== parts[parts.length - 1] && n !== c.name) parts.push(n);
+  return parts.join(" › ");
+}
+
 function focus(i) {
   S.focus = i; S.dirty = true;
   const el = $("#detail");
@@ -771,7 +801,7 @@ function focus(i) {
   const photo = photoUrl(i);
   el.replaceChildren(
     h("div", { class: "head" },
-      h("div", {}, h("h2", {}, `${c.code} · ${c.name}`), h("div", { class: "muted" }, `${g.name} · patch #${i}`)),
+      h("div", {}, h("h2", {}, `${c.code} · ${c.name}`), h("div", { class: "muted", title: "T1 › T2 growth form › T2b genus" }, `${taxPath(c, g)} · patch #${i}`)),
       h("button", { class: "btn ghost x", onclick: () => focus(-1), "aria-label": "Close details" }, "×")),
     h("div", { class: "patch" },
       h("img", { src: cropUrl(i), alt: `${c.name} patch`, loading: "lazy", onerror: e => { e.target.replaceWith(thumbEl(i, 0, "thumb lg")); } }),
@@ -797,7 +827,7 @@ function focus(i) {
     h("h4", { title: "Out-of-fold logistic regression on the embeddings" }, "Linear probe (top 5)"),
     bars(P.lp_top[i].map((ci, k) => [`${M.classes[ci].code} · ${M.classes[ci].name}`, P.lp_prob[i][k], ci]), P.label[i]),
     h("h4", { title: `Cosine similarity to text: “${M.prompt_template}”` }, "Zero-shot vs. text descriptions"),
-    bars(P.zs_top[i].map((ci, k) => [`${M.classes[ci].code} · ${M.classes[ci].name}`, (zs[k] - zmin) / ((zmax - zmin) || 1), ci, `cosine ${fmt(zs[k], 3)}`]), P.label[i]),
+    bars(P.zs_top[i].map((ci, k) => [`${M.classes[ci].code} · ${M.classes[ci].name}`, (zs[k] - zmin) / ((zmax - zmin) || 1), ci, `cosine ${fmt(zs[k], 3)}` + (M.classes[ci].prompt ? ` · prompt: “${M.prompt_template.replace("{name}", M.classes[ci].prompt)}”` : "")]), P.label[i]),
     machine.length ? h("h4", {}, "CoralNet machine suggestions") : null,
     machine.length ? bars(machine.map(([code, conf]) => [code + (codeIdx(code) >= 0 ? ` · ${M.classes[codeIdx(code)].name}` : ""), (conf ?? 0) / 100, codeIdx(code) >= 0 ? codeIdx(code) : null]), P.label[i]) : null,
     h("h4", {}, `Nearest neighbours · ${pct(P.knn_agree[i])} share the label`),
@@ -916,8 +946,8 @@ function renderGallery() {
 
 function downloadCsv(idx) {
   const P = S.P, M = S.M;
-  const cols = ["index", "gcs_uri", "split", "label", "label_name", "group", "island", "site", "date", "lat", "lon", "depth", "knn_agree", "lp_pred", "lp_prob", "zs_pred", "cn_pred", "cn_conf", "score"];
-  const rows = idx.map(i => [i, `gs://${M.bucket}/${P.object[i]}`, P.split[i], M.classes[P.label[i]].code, M.classes[P.label[i]].name, M.groups[P.group[i]].code,
+  const cols = ["index", "gcs_uri", "split", "label", "label_name", "group", "t2", "t2b", "island", "site", "date", "lat", "lon", "depth", "knn_agree", "lp_pred", "lp_prob", "zs_pred", "cn_pred", "cn_conf", "score"];
+  const rows = idx.map(i => [i, `gs://${M.bucket}/${P.object[i]}`, P.split[i], M.classes[P.label[i]].code, M.classes[P.label[i]].name, M.groups[P.group[i]].code, P.t2[i] ?? "", P.t2b[i] ?? "",
     P.island[i], P.site[i], P.date[i], P.lat[i], P.lon[i], P.depth[i], P.knn_agree[i], M.classes[P.lp_top[i][0]].code, P.lp_prob[i][0],
     M.classes[P.zs_top[i][0]].code, P.cn_pred[i], P.cn_conf[i], S.scores ? S.scores[i].toFixed(4) : ""]);
   const csv = [cols, ...rows].map(r => r.map(v => v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(",")).join("\n");
@@ -929,18 +959,19 @@ let classSort = { key: "n", dir: -1 };
 function renderClasses() {
   const M = S.M, pal = CAT[theme()], cc = classColors();
   const cols = [
-    ["code", "Code"], ["name", "Name"], ["group", "Group"], ["n", "Sampled"], ["n_total", "In dataset"],
+    ["code", "Code"], ["name", "Name"], ["group", "Group"], ["form", "Growth form"], ["n", "Sampled"], ["n_total", "In dataset"],
     ["agree", "NN agree"], ["lp", "Probe acc"], ["knn", "k-NN acc"], ["zs", "Zero-shot acc"], ["cn", "CoralNet agree"], ["atyp", "Atypicality"],
   ];
-  const rows = M.classes.map((c, i) => ({ i, code: c.code, name: c.name, sure: c.sure, group: M.groups[c.group].name, gi: c.group, n: c.n, n_total: c.n_total, ...S.classStats[i] }));
+  const rows = M.classes.map((c, i) => ({ i, code: c.code, name: c.name, sure: c.sure, group: M.groups[c.group].name, gi: c.group, form: c.t2_name ?? "", n: c.n, n_total: c.n_total, ...S.classStats[i] }));
   rows.sort((a, b) => { const x = a[classSort.key], y = b[classSort.key]; return (x > y ? 1 : x < y ? -1 : 0) * classSort.dir; });
   const bar = v => v == null ? "—" : [h("span", { class: "minibar", style: { width: `${v * 50}px` } }), pct(v)];
   $("#tab-classes").replaceChildren(h("table", { class: "t" },
     h("thead", {}, h("tr", {}, cols.map(([k, l]) => h("th", { onclick: () => { classSort = { key: k, dir: classSort.key === k ? -classSort.dir : -1 }; renderClasses(); } }, l + (classSort.key === k ? (classSort.dir > 0 ? " ▲" : " ▼") : ""))))),
     h("tbody", {}, rows.map(r => h("tr", { onclick: () => selectClass(r.i), title: "Select this class" },
       h("td", {}, h("span", { class: "sw", style: { background: cc[r.i] } }), r.code),
-      h("td", { class: r.sure ? "" : "unsure", title: r.sure ? "" : "name is a best guess - edit pipeline/labels.py" }, r.name + (r.sure ? "" : " ?")),
+      h("td", { class: r.sure ? "" : "unsure", title: r.sure ? "" : "code is not in pipeline/taxonomy_tree.json" }, r.name + (r.sure ? "" : " ?")),
       h("td", {}, h("span", { class: "sw", style: { background: pal[r.gi % pal.length] } }), r.group),
+      h("td", {}, r.form),
       h("td", {}, r.n), h("td", {}, r.n_total.toLocaleString()),
       h("td", {}, bar(r.agree)), h("td", {}, bar(r.lp)), h("td", {}, bar(r.knn)), h("td", {}, bar(r.zs)), h("td", {}, bar(r.cn)),
       h("td", {}, fmt(r.atyp, 3))))),

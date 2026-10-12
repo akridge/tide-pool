@@ -349,7 +349,7 @@ def main() -> None:
 
     # 4. zero-shot against text descriptions in the shared embedding space
     log("zero-shot text prototypes ...")
-    t3_txt = matryoshka(emb.texts([L.PROMPT_TEMPLATE.format(name=L.name_of(c)) for c in codes]), args.dim)
+    t3_txt = matryoshka(emb.texts([L.PROMPT_TEMPLATE.format(name=L.prompt_of(c)) for c in codes]), args.dim)
     t1_txt = matryoshka(emb.texts([L.PROMPT_TEMPLATE.format(name=L.T1_GROUPS[g][1]) for g in group_codes]),
                         args.dim)
     zs = x @ t3_txt.T
@@ -506,8 +506,9 @@ def main() -> None:
         "k": args.k,
         "clusters": k_clusters,
         "prompt_template": L.PROMPT_TEMPLATE,
-        "classes": [{"code": c, "name": L.name_of(c), "group": group_codes.index(L.group_of(c)),
-                     "sure": L.T3.get(c, (0, 0, False))[2], "n": int((y == i).sum()),
+        "classes": [{"code": c, "name": (t := L.info(c))["name"], "group": group_codes.index(t["t1"]),
+                     "t2": t["t2"], "t2_name": t["t2_name"], "t2b": t["t2b"], "t2b_name": t["t2b_name"],
+                     "prompt": t["prompt"], "sure": t["sure"], "n": int((y == i).sum()),
                      "n_total": int(total.get(c, 0))} for i, c in enumerate(codes)],
         "groups": [{"code": g, "name": L.T1_GROUPS[g][0]} for g in group_codes],
         "projections": list(proj),

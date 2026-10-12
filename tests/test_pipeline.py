@@ -45,5 +45,39 @@ def test_knn_excludes_self_and_sorts():
     assert (np.diff(sim, axis=1) <= 1e-6).all()
 
 
+# the 67 T3 codes in pacific_t3_splits/ (each has a hand-written zero-shot phrase)
+DATASET_CODES = sorted(labels.PROMPT_NAMES)
+
+
+def test_every_dataset_class_is_in_the_taxonomy_tree():
+    assert len(DATASET_CODES) == 67
+    missing = [c for c in DATASET_CODES if c not in labels.TAXONOMY]
+    assert not missing, f"add these codes to pipeline/taxonomy_tree.json: {missing}"
+    assert all(labels.info(c)["sure"] for c in DATASET_CODES)
+
+
 def test_every_class_has_a_known_group():
-    assert all(g in labels.T1_GROUPS for g, _, _ in labels.T3.values())
+    assert all(labels.group_of(c) in labels.T1_GROUPS for c in DATASET_CODES)
+
+
+def test_tree_gives_official_names_and_levels():
+    poma = labels.info("POMA")
+    assert (poma["t1"], poma["t2"], poma["t2b"], poma["name"]) == ("CORAL", "MASS", "POSP", "Porites massive")
+    # DICO and DICT are easy to swap: DICO is the brown Dictyopteris/Dictyota, DICT the green Dictyosphaeria
+    assert labels.name_of("DICO") == "Dictyopteris/Dictyota" and labels.info("DICO")["t2b"] == "BRMA"
+    assert labels.name_of("DICT") == "Dictyosphaeria sp"
+    assert "Dictyosphaeria" in labels.prompt_of("DICT") and "Dictyota" in labels.prompt_of("DICO")
+
+
+def test_unknown_code_falls_back_and_is_unsure():
+    i = labels.info("NOPE")
+    assert i["name"] == "NOPE" and i["t1"] == "UNK" and not i["sure"]
+
+
+def test_labels_csv_override(tmp_path, monkeypatch):
+    monkeypatch.setattr(labels, "_overrides", {})
+    f = tmp_path / "names.csv"
+    f.write_text("code,name\nSP,demosponge\n")
+    labels.load_overrides(str(f))
+    assert labels.name_of("SP") == "demosponge" and labels.prompt_of("SP") == "demosponge"
+    assert labels.group_of("SP") == "I"
