@@ -63,6 +63,35 @@ that is the 256-d embedding), so 6,000 patches is about 18 MB and 30,000 is abou
 `--web-dim 128`. Pages sites are limited to 1 GB. Every visitor also downloads the whole bundle, so a few tens of
 thousands of patches is a practical ceiling.
 
+## Cloud-native export (Parquet + Zarr)
+
+`--export DIR` also writes the build as a dataset that can be read in pieces over HTTP:
+
+```
+DIR/metadata.parquet   one row per patch: gcs_uri, split, label, T1/T2/T2b, site, island, date, lat/lon,
+                       point position in the photo, CoralNet suggestion, k-means cluster, UMAP/PCA/t-SNE coords
+DIR/embeddings.zarr    float16 (n_patches, 768), L2-normalised, 1,024-row chunks; row i = metadata row i
+```
+
+```bash
+python pipeline/build.py --n 6000 --export data/export
+docker compose run --rm build --n 6000 --export data/export      # ./data is mounted, so it lands on the host
+```
+
+Upload `DIR` to a bucket or a Hugging Face dataset repo, then read only what you need:
+
+```python
+import pandas as pd, zarr                     # remote reads also need fsspec and aiohttp
+base = "https://huggingface.co/datasets/<you>/<repo>/resolve/main"
+meta = pd.read_parquet(f"{base}/metadata.parquet")
+emb = zarr.open_array(f"{base}/embeddings.zarr", mode="r")
+v = emb[1234]                                 # downloads one 1.5 MB chunk, not the whole array
+```
+
+Each Zarr chunk is its own file, so any static host works, with no range-request support needed. For a shorter
+Matryoshka vector, take the first `d` columns and re-normalise. With `--n 378680` the export covers the whole dataset
+(about 580 MB of embeddings). The browser bundle in `web/data` should stay much smaller (see above).
+
 ## Data source
 
 The pipeline reads the public bucket behind the HF dataset directly, with no credentials:
@@ -131,6 +160,7 @@ current encoding.
 --dim 768 --web-dim 256   Matryoshka dimensions      --k 12  neighbours per patch
 --clusters 0              k-means k (0 = auto)       --skip-tsne
 --copy-crops              bundle 224px crops locally (otherwise loaded from the public bucket)
+--export DIR              also write metadata.parquet + embeddings.zarr (see above)
 --labels-csv names.csv    override class names (code,name[,group])
 --embedder gemma|stub     --model google/embeddinggemma-2   --device cuda|mps|cpu
 ```
