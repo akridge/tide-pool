@@ -395,9 +395,10 @@ def main() -> None:
         proj["geo"] = geo
 
     # ---------------------------------------------------------------- write bundle
-    if OUT.exists():
-        shutil.rmtree(OUT)
-    OUT.mkdir(parents=True)
+    # empty web/data rather than delete it: it may be a mount point (docker compose)
+    OUT.mkdir(parents=True, exist_ok=True)
+    for old in OUT.iterdir():
+        shutil.rmtree(old) if old.is_dir() else old.unlink()
     log("sprites ...")
     sheets = write_sprites(paths, OUT)
     if args.copy_crops:

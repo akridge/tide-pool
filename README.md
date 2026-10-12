@@ -26,6 +26,43 @@ On a GPU, 6,000 patches embed in a minute or two. On CPU it takes longer, roughl
 To check the UI without downloading the model, run `python pipeline/build.py --n 600 --embedder stub`. The stub uses
 colour and texture features, not semantic embeddings, and the app shows a banner while it's in use.
 
+## Docker
+
+```bash
+export HF_TOKEN=hf_...                                   # if the model requires accepting its terms
+docker compose run --rm build --n 6000                   # writes ./web/data, caches in ./data
+docker compose up -d app                                 # → http://localhost:8000 (with search)
+docker compose --profile pages up pages                  # → http://localhost:8080 (static, as on GitHub Pages)
+```
+
+`build` takes the same flags as `pipeline/build.py` (for a quick test without the model: `--n 600 --embedder stub`).
+The image uses CPU torch. On an NVIDIA GPU (with the NVIDIA Container Toolkit installed), add the override file to every
+command: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml run --rm build --n 6000`. Downloaded model
+weights are kept in the `hf-cache` volume, so they aren't downloaded again.
+
+## Hosting on GitHub Pages
+
+A build is self-contained: everything the app needs is in `web/`, so `web/` can be served by any static host.
+Patch crops and full survey photos still load from NOAA's public bucket. Free-text and image search need the server, so
+on a static host they are off and search falls back to class names.
+
+`web/data/` is git-ignored, so publish it explicitly, for example from a `gh-pages` branch (needs git 2.42 or newer):
+
+```bash
+python pipeline/build.py --n 6000                        # or the docker compose build above
+git worktree add --orphan -b gh-pages ../tide-pool-pages
+cp -r web/. ../tide-pool-pages/ && touch ../tide-pool-pages/.nojekyll
+cd ../tide-pool-pages && git add -A && git commit -m "Publish bundle" && git push -u origin gh-pages
+```
+
+Then set Settings → Pages → *Deploy from a branch* → `gh-pages` / root.
+
+Only the sampled patches are embedded and shipped, not all 378,680. A bundle costs about 3 KB per patch (1 KB of
+that is the 256-d embedding), so 6,000 patches is about 18 MB and 30,000 is about 90 MB. GitHub rejects files over
+100 MB, which `embeddings.f32` reaches at about 100,000 patches with `--web-dim 256`, or about 200,000 with
+`--web-dim 128`. Pages sites are limited to 1 GB. Every visitor also downloads the whole bundle, so a few tens of
+thousands of patches is a practical ceiling.
+
 ## Data source
 
 The pipeline reads the public bucket behind the HF dataset directly, with no credentials:
