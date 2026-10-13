@@ -7,6 +7,7 @@ It shows more than the embedding cloud. You can also see the image patches thems
 ```
 pipeline/build.py   sample → download → join metadata → embed → analyse → web/data/
 pipeline/export.py  optional Parquet + Zarr export of the same build (--export DIR)
+pipeline/full.py    embeds and analyses ALL 378,680 patches for the WebGL viewer at /full/
 server/app.py       serves web/ and embeds text / image queries with the same model
 web/                dependency-free canvas app (no build step)
 docker-compose.yml  build / app / pages services (docker-compose.gpu.yml for NVIDIA)
@@ -28,6 +29,47 @@ On a GPU, 6,000 patches embed in a minute or two. On CPU it takes longer, roughl
 To check the UI without downloading the model, run `python pipeline/build.py --n 600 --embedder stub`. The stub uses
 colour and texture features, not semantic embeddings, and the app shows a banner while it's in use.
 
+## All patches (`/full/`)
+
+`pipeline/build.py` works on a sample, a few thousand to a few tens of thousands of patches, and ships everything to
+the browser. To embed **every** patch, use `pipeline/full.py` and open the WebGL viewer at
+http://localhost:8000/full/:
+
+```bash
+python pipeline/full.py                      # all 378,680 patches with EmbeddingGemma 2 (GPU strongly recommended)
+python server/app.py                         # restart it after each run so it loads the new vectors
+python pipeline/full.py --limit 20000 --embedder stub   # quick try-out on a random subset
+```
+
+With Docker (Windows `cmd`: use `set` instead of `export` and `;` instead of `:` in `COMPOSE_FILE`):
+
+```bash
+export COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+docker compose run --rm full
+docker compose up -d app                     # → http://localhost:8000/full/
+```
+
+How it scales:
+
+- **Streaming, resumable embedding.** Crops are downloaded in shards of 4,096 (the next shard downloads while the GPU
+  embeds the current one), embedded and dropped, so the 32 GB of crops never lands on disk. Each finished shard is
+  saved to `data/full/emb_<model>/`. Stop the run at any time and start it again: finished shards are skipped.
+- **Analysis at full size.** Exact k-NN runs on the GPU through torch, and falls back to the CPU, much more slowly.
+  It also computes neighbour agreement, the k-NN vote, zero-shot top 3, mini-batch k-means (64 clusters), PCA, and UMAP
+  on a 50-d PCA. The result is cached in `data/full/analysis_<model>.npz`; `--reanalyse` recomputes it and
+  `--skip-umap` skips the slowest step.
+- **Viewer.** The browser loads compact binary columns, about 60 bytes per patch (about 25 MB for every patch), and
+  draws all the points with WebGL. A patch's details and neighbours are fetched only when you open it. Patch images
+  load from NOAA's bucket on hover, in the detail panel, and as tiles in *Patches* mode once fewer than 450 are on screen.
+- **Search over every vector.** Free-text search, image search and *Find similar* (`S`) run in the server against
+  `data/full/search.npy` (256-d, about 190 MB) and colour all the points by similarity. Typing a class code
+  (e.g. `POMA`) filters to that class, with or without the server.
+
+Disk use for every patch: about 600 MB of embedding shards, 190 MB for the search matrix, and roughly 200 MB of viewer
+data, most of it per-patch detail files. The full run has only been tested on a 20,000-patch subset with the stub
+embedder; GPU speed for EmbeddingGemma 2 depends on your card. The viewer has no linear probe, t-SNE, 3-D view or
+classes/confusions tabs; those stay in the sample explorer at `/`.
+
 ## Docker
 
 ```bash
@@ -37,7 +79,8 @@ docker compose up -d app                                 # → http://localhost:
 docker compose --profile pages up pages                  # → http://localhost:8080 (static, as on GitHub Pages)
 ```
 
-`build` takes the same flags as `pipeline/build.py` (for a quick test without the model: `--n 600 --embedder stub`).
+`build` takes the same flags as `pipeline/build.py` (for a quick test without the model: `--n 600 --embedder stub`),
+and `full` takes the flags of `pipeline/full.py` (see [All patches](#all-patches-full)).
 The image uses CPU torch. On an NVIDIA GPU (with the NVIDIA Container Toolkit installed), add the override file to every
 command: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml run --rm build --n 6000`. Downloaded model
 weights are kept in the `hf-cache` volume, so they aren't downloaded again.

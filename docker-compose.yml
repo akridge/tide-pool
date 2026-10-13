@@ -4,6 +4,7 @@
 #   docker compose run --rm build --n 600 --embedder stub
 #   docker compose up app                             # http://localhost:8000
 #   docker compose --profile pages up pages           # static preview, as on GitHub Pages: http://localhost:8080
+#   docker compose run --rm full                      # embed ALL 378,680 patches -> http://localhost:8000/full/
 #
 # On an NVIDIA GPU add the override:  docker compose -f docker-compose.yml -f docker-compose.gpu.yml ...
 # The bundle lands in ./web/data and the per-stage cache in ./data on the host, so both survive
@@ -20,6 +21,7 @@ x-tide-pool: &tide-pool
   volumes:
     - ./data:/app/data
     - ./web/data:/app/web/data
+    - ./web/full/data:/app/web/full/data
     - hf-cache:/cache/huggingface
 
 services:
@@ -28,6 +30,13 @@ services:
     profiles: ["build"]
     entrypoint: ["python", "pipeline/build.py"]
     command: ["--n", "6000"]
+
+  full:
+    # every patch, resumable: stop it any time and run it again (see pipeline/full.py)
+    <<: *tide-pool
+    profiles: ["build"]
+    entrypoint: ["python", "pipeline/full.py"]
+    command: []
 
   app:
     <<: *tide-pool

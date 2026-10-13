@@ -3,5 +3,7 @@ __pycache__/
 .venv/
 data/cache/
 data/export/
+data/full/
+web/full/data/
 web/data/
 .pytest_cache/

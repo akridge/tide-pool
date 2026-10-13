@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tide Pool · All Patches</title>
+<meta name="description" content="Every NOAA Pacific benthic patch, embedded with EmbeddingGemma 2, in one WebGL map.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%232a78d6'/><circle cx='11' cy='13' r='3' fill='%23eb6834'/><circle cx='20' cy='18' r='4' fill='%231baf7a'/><circle cx='14' cy='22' r='2' fill='%23eda100'/></svg>">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="full.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true"></span>
+    <div>
+      <h1>Tide Pool <span class="muted">· all patches</span></h1>
+      <p class="sub" id="subtitle">Loading…</p>
+    </div>
+  </div>
+  <form class="search" id="searchForm" autocomplete="off">
+    <input id="q" type="search" placeholder="Search all patches by text, or type a class code (POMA)" aria-label="Search">
+    <label class="btn icon" id="uploadBtn" title="Search by image">
+      <input id="upload" type="file" accept="image/*" hidden>
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
+    </label>
+    <button class="btn" type="submit">Search</button>
+  </form>
+  <div class="status">
+    <a class="chip" href="../" title="The sample explorer, with the linear probe, t-SNE, 3D and the classes / confusions tabs">Sample explorer</a>
+    <span class="chip" id="serverChip">server…</span>
+  </div>
+</header>
+
+<div class="banner" id="stubBanner" hidden>
+  Built with the <b>stub embedder</b> (colour/texture features) for testing. Run <code>python pipeline/full.py</code>
+  without <code>--embedder stub</code> to use EmbeddingGemma&nbsp;2.
+</div>
+
+<nav class="toolbar">
+  <div class="seg" id="viewSeg" aria-label="Layout"></div>
+  <label class="field">Colour <select id="colorBy"></select></label>
+  <div class="seg" id="renderSeg" aria-label="Render">
+    <button data-v="dots" class="on">Dots</button>
+    <button data-v="patches" title="Draw the image patches once you zoom in far enough">Patches</button>
+  </div>
+  <label class="field">Size <input id="size" type="range" min="1" max="12" step="0.5" value="2.5"></label>
+  <span class="spacer"></span>
+  <span class="chip query" id="queryChip" hidden><span id="queryText"></span><button id="clearQuery" aria-label="Clear search">×</button></span>
+  <button class="btn ghost" id="resetView" title="Reset view (R)">Reset</button>
+</nav>
+
+<main class="layout">
+  <aside class="legend" id="legend" aria-label="Legend"></aside>
+  <section class="stage" id="stage">
+    <canvas id="gl"></canvas>
+    <canvas id="overlay"></canvas>
+    <div class="hint" id="hint">Scroll to zoom · drag to pan · click a point for details · S = find similar</div>
+    <div class="tooltip" id="tooltip" hidden></div>
+    <div class="loading" id="loading">Loading…</div>
+  </section>
+  <aside class="detail" id="detail" hidden></aside>
+</main>
+
+<section class="results" id="results" hidden>
+  <div class="results-head"><b id="resultsTitle"></b><span class="muted" id="resultsNote"></span></div>
+  <div class="strip" id="strip"></div>
+</section>
+
+<script src="full.js"></script>
+</body>
+</html>
