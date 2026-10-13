@@ -1,0 +1,25 @@
+/* All-patches viewer: layered on ../style.css (same tokens and panels). */
+#gl, #overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+#gl { cursor: crosshair; touch-action: none; }
+#overlay { pointer-events: none; }
+.stage.dragging #gl { cursor: grabbing; }
+
+.crop { display: block; border-radius: 6px; background: var(--surface-2); object-fit: cover; flex: none; }
+.tooltip .crop { width: 72px; height: 72px; }
+.nn .cell .crop { width: 100%; aspect-ratio: 1; }
+.nn .cell.diff .crop { outline: 2px solid var(--critical); outline-offset: -2px; }
+
+.results { background: var(--surface); border-top: 1px solid var(--border); padding: 8px 16px 10px; min-width: 0; }
+.results-head { display: flex; gap: 12px; align-items: baseline; margin-bottom: 6px; }
+.strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.strip .cell { flex: none; width: 88px; cursor: pointer; font-size: 11px; color: var(--ink-2); }
+.strip .cell .crop { width: 88px; height: 88px; }
+.strip .cell .cap { display: flex; justify-content: space-between; gap: 4px; padding-top: 2px; font-variant-numeric: tabular-nums; }
+
+.legend .item.isolated .lab { font-weight: 600; }
+.about-mini { margin-top: 14px; color: var(--ink-2); font-size: 12px; }
+.about-mini .row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  #gl { touch-action: pan-y; }
+}

@@ -108,3 +108,29 @@ def test_export_round_trip(tmp_path):
     z = zarr.open_array(str(tmp_path / "embeddings.zarr"), mode="r")
     assert z.shape == (n, 768) and z.dtype == np.float16 and z.attrs["model"] == "test"
     assert np.allclose(z[3], emb[3], atol=1e-3)
+
+
+def test_full_knn_skips_self_and_failed_rows_and_matches_numpy():
+    import full
+    x = build.matryoshka(np.random.default_rng(2).standard_normal((300, 32)), 32).astype(np.float32)
+    ok = np.ones(300, bool)
+    ok[[7, 42]] = False
+    x[~ok] = 0
+    idx, sim = full.knn(x, ok, 5, "cpu")
+    assert not (idx == np.arange(300)[:, None]).any()
+    assert not np.isin(idx, [7, 42]).any()
+    assert (np.diff(sim, axis=1) <= 1e-6).all()
+    # the plain-numpy fallback (no torch) finds the same neighbours for good rows
+    ref, _ = build.knn(x, 5)
+    good = np.flatnonzero(ok)
+    assert (np.sort(idx[good], 1) == np.sort(ref[good], 1)).mean() > 0.95
+
+
+def test_full_norm2_and_codes_of():
+    import full
+    p = np.array([[0, 0], [10, 5], [5, np.nan], [20, 10]], np.float32)
+    q = full.norm2(p)
+    fin = np.isfinite(q).all(1)
+    assert np.abs(q[fin]).max() <= 1.05 and not fin[2]
+    codes, cats = full.codes_of(pd.Series(["b", None, "a", "b"]))
+    assert cats == ["a", "b"] and codes.tolist() == [1, 255, 0, 1]
